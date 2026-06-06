@@ -26,9 +26,9 @@ async function init(): Promise<void> {
     }),
     TrackViewport.create({
       world,
-      container: document.getElementById('view-p2')!,
-      cameraViewId: 'orbit',
-      followRiderId: 'rider-2',
+      container: document.getElementById('view-p4')!,
+      cameraViewId: 'firstPerson',
+      followRiderId: 'rider-4',
     }),
     TrackViewport.create({
       world,

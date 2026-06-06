@@ -89,6 +89,7 @@ export class Rider {
       state.speedKmh,
       state.leanDeg,
       dt,
+      state.lateralOffsetM,
     );
     return this.applyFrame(frame, dt);
   }

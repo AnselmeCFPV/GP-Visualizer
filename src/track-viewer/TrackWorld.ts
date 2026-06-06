@@ -324,9 +324,15 @@ export class TrackWorld implements TrackWorldHandle {
     await this.engineSound?.resumeContext();
   }
 
-  setRiderFirstPerson(riderId: string, enabled: boolean): void {
+  refreshFirstPersonModes(): void {
+    const fpRiders = new Set<string>();
+    for (const viewport of this.viewports) {
+      if (viewport.isFirstPersonActive()) {
+        fpRiders.add(viewport.getFollowRider());
+      }
+    }
     for (const rider of this.riders.values()) {
-      rider.setFirstPersonMode(rider.id === riderId && enabled);
+      rider.setFirstPersonMode(fpRiders.has(rider.id));
     }
   }
 

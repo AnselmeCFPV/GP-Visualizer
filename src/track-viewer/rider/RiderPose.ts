@@ -90,6 +90,7 @@ export class RiderPose {
     speedKmh: number,
     leanDeg: number,
     dt: number,
+    lateralOffsetM = 0,
   ): RiderFrame {
     if (this.distanceSmoothed === null) {
       this.distanceSmoothed = distance;
@@ -104,6 +105,13 @@ export class RiderPose {
 
     _pivot.copy(ground.position);
     _pivot.y += BIKE_GROUND_OFFSET;
+
+    if (Math.abs(lateralOffsetM) > 1e-4) {
+      const nx = -ground.tangent.z;
+      const nz = ground.tangent.x;
+      _pivot.x += nx * lateralOffsetM;
+      _pivot.z += nz * lateralOffsetM;
+    }
 
     if (this.positionSmoothed === null) {
       this.positionSmoothed = _pivot.clone();

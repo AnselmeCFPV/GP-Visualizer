@@ -26,6 +26,7 @@ export class TrackViewport implements TrackViewportHandle {
   private cameraMode: CameraMode = 'free';
   private activeCameraViewId = 'free';
   private followRiderId: string;
+  private firstPersonActive = false;
 
   constructor(
     private readonly world: TrackWorld,
@@ -134,8 +135,8 @@ export class TrackViewport implements TrackViewportHandle {
 
     if (def.spec.type === 'builtin') {
       this.cameraMode = def.spec.mode;
-      const isFp = def.spec.mode === 'firstPerson';
-      this.world.setRiderFirstPerson(this.followRiderId, isFp);
+      this.firstPersonActive = def.spec.mode === 'firstPerson';
+      this.world.refreshFirstPersonModes();
       fogForCameraMode(
         this.world.scene,
         def.spec.mode !== 'free' ? 'rider' : 'orbit',
@@ -145,9 +146,14 @@ export class TrackViewport implements TrackViewportHandle {
       }
     } else {
       this.cameraMode = 'orbit';
-      this.world.setRiderFirstPerson(this.followRiderId, false);
+      this.firstPersonActive = false;
+      this.world.refreshFirstPersonModes();
       fogForCameraMode(this.world.scene, 'rider');
     }
+  }
+
+  isFirstPersonActive(): boolean {
+    return this.firstPersonActive;
   }
 
   getActiveCameraView(): string {
