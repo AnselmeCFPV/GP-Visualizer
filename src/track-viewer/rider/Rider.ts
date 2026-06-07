@@ -14,6 +14,7 @@ const _trailOrigin = new THREE.Vector3();
 
 export interface RiderOptions {
   label?: string;
+  country?: string;
   /** Livrée PNG prédéfinie, ou teinte hex de fallback */
   color?: RiderColor | number;
 }
@@ -21,6 +22,7 @@ export interface RiderOptions {
 export class Rider {
   readonly id: string;
   readonly label: string;
+  readonly country?: string;
   readonly visual = new RiderVisual();
   readonly trail = new RiderTrail();
   readonly playback: RiderPlayback;
@@ -40,6 +42,7 @@ export class Rider {
   ) {
     this.id = id;
     this.label = options.label ?? id;
+    this.country = options.country?.toUpperCase();
     this.color = options.color;
     this.pose = new RiderPose(centerline);
     this.playback = new RiderPlayback(centerline, origin, { updateIntervalMs });
@@ -99,12 +102,14 @@ export class Rider {
       return this.lastFrame;
     }
 
-    const state = this.playback.tick(dt);
+    const state = this.playback.tick(dt, performance.now());
     const frame = this.pose.updateFromDistance(
       state.distance,
       state.speedKmh,
       state.leanDeg,
       dt,
+      state.lateralOffsetM,
+      { smoothing: false },
     );
     return this.applyFrame(frame, dt);
   }
@@ -135,7 +140,7 @@ export class Rider {
 
     if (this.modelReady) {
       this.visual.setVisible(true);
-      this.visual.apply(frame);
+      this.visual.apply(frame, dt);
       _trailOrigin
         .copy(frame.bikePosition)
         .addScaledVector(frame.tangent, -TRAIL_REAR_OFFSET_M);

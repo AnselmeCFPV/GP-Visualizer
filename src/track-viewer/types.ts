@@ -70,6 +70,8 @@ export type RiderColor =
 export interface RiderDefinition {
   id: string;
   label?: string;
+  /** Code pays ISO 3166-1 alpha-2, ex. FR, IT, JP */
+  country?: string;
   /** Livrée PNG prédéfinie, ou teinte hex de fallback */
   color?: RiderColor | number;
 }
@@ -128,6 +130,7 @@ export type PlaybackMode = 'idle' | 'playback';
 export interface RiderTelemetry {
   riderId: string;
   label: string;
+  country?: string;
   speedKmh: number;
   leanDeg: number;
   position?: LocalPoint;
@@ -141,6 +144,10 @@ export interface RiderUpdate {
   speedKmh: number;
   leanDeg: number;
   headingDeg?: number;
+  /** Distance curviligne continue (m) — évite la reprojection GPS si fournie */
+  distanceM?: number;
+  /** Décalage perpendiculaire à la piste (+ = extérieur virage) */
+  lateralOffsetM?: number;
   timestamp?: number;
 }
 

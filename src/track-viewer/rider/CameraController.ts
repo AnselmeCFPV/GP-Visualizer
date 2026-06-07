@@ -13,7 +13,7 @@ import type { RiderFrame } from './RiderPose';
 import type { MotionBlurState } from './SpeedMotionBlur';
 import { resolveFixedViewPosition } from './CameraViewRegistry';
 
-const FP_HEAD = new THREE.Vector3(0, 1.18, 0.22);
+const FP_HEAD = new THREE.Vector3(0, 1.18, -0.02);
 const REAR_BIKE_MOUNT = new THREE.Vector3(0, 1.05, 1.05);
 const FP_PITCH = new THREE.Quaternion().setFromAxisAngle(
   new THREE.Vector3(1, 0, 0),

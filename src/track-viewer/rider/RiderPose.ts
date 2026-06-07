@@ -21,6 +21,12 @@ export interface InterpolatedRiderState {
   distance: number;
   speedKmh: number;
   leanDeg: number;
+  lateralOffsetM: number;
+}
+
+export interface RiderPoseUpdateOptions {
+  /** Lissage visuel — désactivé en mode API (interpolation déjà gérée en amont) */
+  smoothing?: boolean;
 }
 
 const _pivot = new THREE.Vector3();
@@ -91,17 +97,13 @@ export class RiderPose {
     leanDeg: number,
     dt: number,
     lateralOffsetM = 0,
+    options: RiderPoseUpdateOptions = {},
   ): RiderFrame {
-    if (this.distanceSmoothed === null) {
-      this.distanceSmoothed = distance;
-    } else {
-      const distAlpha = 1 - Math.exp(-dt * 14);
-      this.distanceSmoothed += (distance - this.distanceSmoothed) * distAlpha;
-    }
+    const smooth = options.smoothing ?? true;
+    const trackDistance = smooth ? this.resolveDistance(distance, dt) : distance;
+    const trackLean = smooth ? this.resolveLean(leanDeg, dt) : leanDeg;
 
-    this.leanSmoothed += (leanDeg - this.leanSmoothed) * (1 - Math.exp(-dt * 9));
-
-    const ground = sampleBikeGroundPose(this.path, this.distanceSmoothed, this.leanSmoothed);
+    const ground = sampleBikeGroundPose(this.path, trackDistance, trackLean);
 
     _pivot.copy(ground.position);
     _pivot.y += BIKE_GROUND_OFFSET;
@@ -113,24 +115,46 @@ export class RiderPose {
       _pivot.z += nz * lateralOffsetM;
     }
 
-    if (this.positionSmoothed === null) {
+    if (!smooth) {
+      if (this.positionSmoothed === null) {
+        this.positionSmoothed = _pivot.clone();
+      } else {
+        this.positionSmoothed.copy(_pivot);
+      }
+      this.setQuaternion(ground.tangent, trackLean);
+    } else if (this.positionSmoothed === null) {
       this.positionSmoothed = _pivot.clone();
+      this.updateQuaternion(ground.tangent, trackLean, dt);
     } else {
       const posAlpha = 1 - Math.exp(-dt * 10);
       this.positionSmoothed.x += (_pivot.x - this.positionSmoothed.x) * posAlpha;
       this.positionSmoothed.z += (_pivot.z - this.positionSmoothed.z) * posAlpha;
       this.positionSmoothed.y += (_pivot.y - this.positionSmoothed.y) * posAlpha;
+      this.updateQuaternion(ground.tangent, trackLean, dt);
     }
-
-    this.updateQuaternion(ground.tangent, this.leanSmoothed, dt);
 
     return {
       bikePosition: this.positionSmoothed.clone(),
       bikeQuaternion: this.bikeQuaternion.clone(),
       tangent: ground.tangent.clone(),
       speedKmh,
-      leanDeg: this.leanSmoothed,
+      leanDeg: trackLean,
     };
+  }
+
+  private resolveDistance(distance: number, dt: number): number {
+    if (this.distanceSmoothed === null) {
+      this.distanceSmoothed = distance;
+      return distance;
+    }
+    const distAlpha = 1 - Math.exp(-dt * 14);
+    this.distanceSmoothed += (distance - this.distanceSmoothed) * distAlpha;
+    return this.distanceSmoothed;
+  }
+
+  private resolveLean(leanDeg: number, dt: number): number {
+    this.leanSmoothed += (leanDeg - this.leanSmoothed) * (1 - Math.exp(-dt * 9));
+    return this.leanSmoothed;
   }
 
   resetQuaternion(): void {
@@ -140,7 +164,16 @@ export class RiderPose {
     this.leanSmoothed = 0;
   }
 
+  private setQuaternion(tangent: THREE.Vector3, leanDeg: number): void {
+    this.bikeQuaternion.copy(this.buildTargetQuaternion(tangent, leanDeg));
+  }
+
   private updateQuaternion(tangent: THREE.Vector3, leanDeg: number, dt: number): void {
+    _targetQuat.copy(this.buildTargetQuaternion(tangent, leanDeg));
+    this.bikeQuaternion.slerp(_targetQuat, 1 - Math.exp(-dt * 12));
+  }
+
+  private buildTargetQuaternion(tangent: THREE.Vector3, leanDeg: number): THREE.Quaternion {
     _lookFrom.set(0, 0, 0);
     _lookTo.copy(tangent);
     if (_lookTo.lengthSq() < 1e-8) {
@@ -154,7 +187,6 @@ export class RiderPose {
 
     const rollRad = (-leanDeg * Math.PI) / 180;
     _rollQuat.setFromAxisAngle(_rollAxis, rollRad);
-    _targetQuat.copy(_baseQuat).multiply(_rollQuat);
-    this.bikeQuaternion.slerp(_targetQuat, 1 - Math.exp(-dt * 12));
+    return _targetQuat.copy(_baseQuat).multiply(_rollQuat);
   }
 }

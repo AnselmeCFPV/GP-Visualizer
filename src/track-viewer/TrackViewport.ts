@@ -104,7 +104,7 @@ export class TrackViewport implements TrackViewportHandle {
   }
 
   cycleCameraMode(): CameraMode {
-    const order: CameraMode[] = ['free', 'orbit', 'follow', 'firstPerson'];
+    const order: CameraMode[] = ['free', 'orbit', 'follow', 'firstPerson', 'rear-bike'];
     const idx = (order.indexOf(this.cameraMode) + 1) % order.length;
     const next = order[idx]!;
     this.setCameraView(next);

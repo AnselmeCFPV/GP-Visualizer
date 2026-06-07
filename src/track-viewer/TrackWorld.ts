@@ -59,6 +59,7 @@ export class TrackWorld implements TrackWorldHandle {
   private engineSound: EngineSound | null = null;
   private audioCamera: THREE.PerspectiveCamera | null = null;
   private primaryRiderId = DEFAULT_RIDER_ID;
+  private beforeUpdate: ((now: number, dt: number) => void) | null = null;
 
   private constructor(options: TrackWorldOptions) {
     this.scene = new THREE.Scene();
@@ -133,6 +134,11 @@ export class TrackWorld implements TrackWorldHandle {
     this.startLoop();
   }
 
+  /** Hook appelé au début de chaque frame render (avant interpolation pilotes) */
+  onBeforeUpdate(handler: (now: number, dt: number) => void): void {
+    this.beforeUpdate = handler;
+  }
+
   attachViewport(viewport: TrackViewport): void {
     this.viewports.add(viewport);
   }
@@ -152,7 +158,7 @@ export class TrackWorld implements TrackWorldHandle {
       this.centerline,
       origin,
       this.updateIntervalMs,
-      { label: definition.label, color: definition.color },
+      { label: definition.label, country: definition.country, color: definition.color },
     );
 
     if (this.bikeTemplate) {
@@ -182,6 +188,7 @@ export class TrackWorld implements TrackWorldHandle {
     return [...this.riders.values()].map((r) => ({
       id: r.id,
       label: r.label,
+      country: r.country,
     }));
   }
 
@@ -207,6 +214,31 @@ export class TrackWorld implements TrackWorldHandle {
     this.ensureRider(riderId);
     this.demo?.stop();
     this.riders.get(riderId)!.pushUpdate(update);
+  }
+
+  /** Mise à jour légère (sans conversion GPS) — idéal pour la sim interne haute fréquence */
+  sampleRiderKinematics(
+    distanceM: number,
+    options: TrackRiderSampleOptions,
+  ): RiderUpdate {
+    if (!this.trackPath) {
+      throw new Error('[track-viewer] Circuit non initialisé');
+    }
+
+    const sample = sampleTrackPath(this.trackPath, distanceM);
+    const lateralOffset = options.lateralOffsetM ?? 0;
+
+    return {
+      lon: 0,
+      lat: 0,
+      speedKmh: options.speedKmh,
+      leanDeg:
+        options.leanDeg ??
+        m1000rrLeanDeg(options.speedKmh / 3.6, sample.signedCurvature),
+      distanceM,
+      lateralOffsetM: lateralOffset,
+      timestamp: options.timestamp,
+    };
   }
 
   sampleRiderUpdate(distanceM: number, options: TrackRiderSampleOptions): RiderUpdate {
@@ -237,6 +269,8 @@ export class TrackWorld implements TrackWorldHandle {
       speedKmh: options.speedKmh,
       leanDeg: options.leanDeg ?? m1000rrLeanDeg(options.speedKmh / 3.6, sample.signedCurvature),
       headingDeg,
+      distanceM,
+      lateralOffsetM: lateralOffset,
       timestamp: options.timestamp,
     };
   }
@@ -284,6 +318,7 @@ export class TrackWorld implements TrackWorldHandle {
         this.registerRider({
           id,
           label: `Pilote ${i + 1}`,
+          country: 'FR',
           color: DEMO_RIDER_COLORS[i % DEMO_RIDER_COLORS.length],
         });
       }
@@ -326,6 +361,7 @@ export class TrackWorld implements TrackWorldHandle {
     return {
       riderId: id,
       label: rider.label,
+      country: rider.country,
       speedKmh: frame?.speedKmh ?? state.speedKmh,
       leanDeg: frame?.leanDeg ?? state.leanDeg,
       position: state.position,
@@ -417,6 +453,9 @@ export class TrackWorld implements TrackWorldHandle {
   }
 
   private update(dt: number): void {
+    const now = performance.now();
+    this.beforeUpdate?.(now, dt);
+
     const demoStates = this.demo?.isActive() ? this.demo.tickFrame(dt) : null;
 
     if (demoStates) {

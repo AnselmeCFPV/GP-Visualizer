@@ -120,35 +120,24 @@ function samplePosition3D(path: TrackPathData, s: number): THREE.Vector3 {
   return new THREE.Vector3(xz.x, y, xz.z);
 }
 
-/** Pose au sol : roues avant/arrière sur le profil, tangente 3D selon la pente */
+function normalizeArcLength(distance: number, totalLength: number): number {
+  return ((distance % totalLength) + totalLength) % totalLength;
+}
+
+/** Pose au sol : position sur l'arc (pas moyenne 3D des roues — évite les sauts à la ligne) */
 export function sampleBikeGroundPose(
   path: TrackPathData,
   distance: number,
   leanDeg = 0,
 ): BikeGroundPose {
+  const sample = interpolateAt(path, distance);
+  const s = normalizeArcLength(distance, path.totalLength);
   const halfBase = WHEELBASE_M * 0.5;
-  const rear = samplePosition3D(path, distance - halfBase);
-  const front = samplePosition3D(path, distance + halfBase);
-
-  const tangent = front.clone().sub(rear);
-  if (tangent.lengthSq() < 1e-8) {
-    tangent.set(0, 0, -1);
-  } else {
-    tangent.normalize();
-  }
-
-  const position = rear.clone().add(front).multiplyScalar(0.5);
-  position.y = Math.max(rear.y, front.y);
+  const rearY = samplePosition3D(path, s - halfBase).y;
+  const frontY = samplePosition3D(path, s + halfBase).y;
+  sample.position.y = Math.max(sample.position.y, rearY, frontY);
   void leanDeg;
-
-  const xz = interpolateXZ(path, distance);
-  const { signedCurvatures } = path;
-  const n = path.points.length;
-  const c0 = signedCurvatures[xz.idx];
-  const c1 = signedCurvatures[(xz.idx + 1) % n];
-  const signedCurvature = c0 * (1 - xz.t) + c1 * xz.t;
-
-  return { position, tangent, signedCurvature };
+  return sample;
 }
 
 function interpolateAt(

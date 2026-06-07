@@ -36,6 +36,78 @@ export interface BikeRig {
   wheelOffsets: BikeWheelOffsets;
 }
 
+export interface WheelSpinMetadata {
+  axis: 'x' | 'y' | 'z';
+  radiusM: number;
+}
+
+const MIN_WHEEL_RADIUS_M = 0.12;
+const _wheelBox = new THREE.Box3();
+const _wheelCenter = new THREE.Vector3();
+const _wheelSize = new THREE.Vector3();
+const _wheelWorldMatrix = new THREE.Matrix4();
+const _wheelInvSpinner = new THREE.Matrix4();
+
+function detectWheelSpinAxis(size: THREE.Vector3): 'x' | 'y' | 'z' {
+  if (size.x <= size.y && size.x <= size.z) return 'x';
+  if (size.y <= size.x && size.y <= size.z) return 'y';
+  return 'z';
+}
+
+function wheelRadiusForAxis(size: THREE.Vector3, axis: 'x' | 'y' | 'z'): number {
+  if (axis === 'x') return Math.max(size.y, size.z) * 0.5;
+  if (axis === 'y') return Math.max(size.x, size.z) * 0.5;
+  return Math.max(size.x, size.y) * 0.5;
+}
+
+/** Pivot sur le centre géométrique de la roue — rotation autour de l'essieu */
+function attachWheelSpinPivot(wheel: THREE.Object3D): THREE.Group {
+  const parent = wheel.parent;
+  if (!parent) {
+    throw new Error(`[track-viewer] Roue "${wheel.name}" sans parent`);
+  }
+
+  wheel.updateMatrixWorld(true);
+  _wheelBox.setFromObject(wheel);
+  _wheelBox.getSize(_wheelSize);
+  _wheelBox.getCenter(_wheelCenter);
+
+  const axis = detectWheelSpinAxis(_wheelSize);
+  const radiusM = Math.max(wheelRadiusForAxis(_wheelSize, axis), MIN_WHEEL_RADIUS_M);
+  const centerLocal = _wheelCenter.clone();
+  parent.worldToLocal(centerLocal);
+
+  const spinner = new THREE.Group();
+  spinner.name = `${wheel.name}_spin`;
+  spinner.userData.wheelSpin = { axis, radiusM } satisfies WheelSpinMetadata;
+
+  _wheelWorldMatrix.copy(wheel.matrixWorld);
+  parent.add(spinner);
+  spinner.position.copy(centerLocal);
+  parent.remove(wheel);
+  spinner.add(wheel);
+
+  spinner.updateMatrixWorld(true);
+  _wheelInvSpinner.copy(spinner.matrixWorld).invert();
+  _wheelWorldMatrix.premultiply(_wheelInvSpinner);
+  _wheelWorldMatrix.decompose(wheel.position, wheel.quaternion, wheel.scale);
+
+  return spinner;
+}
+
+function setupWheelSpinPivots(root: THREE.Object3D): void {
+  const wheels: THREE.Object3D[] = [];
+  root.traverse((child) => {
+    if (child.name === 'Wheel_R' || child.name === 'Wheel_F') {
+      wheels.push(child);
+    }
+  });
+
+  for (const wheel of wheels) {
+    attachWheelSpinPivot(wheel);
+  }
+}
+
 function tuneMaterials(root: THREE.Object3D, renderer: THREE.WebGLRenderer): void {
   const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
   root.traverse((child) => {
@@ -190,6 +262,8 @@ function buildBikeRig(obj: THREE.Object3D): BikeRig {
     obj.position.y -= wheelMinY / rig.scale.y;
   }
 
+  rig.updateMatrixWorld(true);
+  setupWheelSpinPivots(rig);
   rig.updateMatrixWorld(true);
   const wheelOffsets = extractWheelOffsets(rig);
 
