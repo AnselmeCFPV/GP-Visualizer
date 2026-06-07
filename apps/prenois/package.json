@@ -1,0 +1,25 @@
+{
+  "name": "@prenois/app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@prenois/circuit": "*",
+    "@prenois/geo": "*",
+    "@prenois/session-data": "*",
+    "@prenois/track-viewer": "*",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.16",
+    "@types/three": "^0.175.0",
+    "sirv": "^3.0.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.4"
+  }
+}

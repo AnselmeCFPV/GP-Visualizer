@@ -1,0 +1,16 @@
+{
+  "name": "@prenois/track-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@prenois/geo": "*",
+    "three": "^0.175.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.175.0"
+  }
+}
