@@ -13,6 +13,12 @@ import { TrackWorld, TrackViewport } from './track-viewer';
 
 const world = await TrackWorld.create({ startDemoSimulator: true, demoRiderCount: 4 });
 
+world.registerRider({
+  id: 'rider-custom',
+  label: 'Pilote Custom',
+  color: 'blue-sky', // blue-dark, yellow, purple, pink, magenta, etc.
+});
+
 const main = TrackViewport.create({
   world,
   container: document.getElementById('main')!,

@@ -21,6 +21,15 @@ export function geoToLocal(point: GeoPoint, origin: GeoOrigin): LocalPoint {
   return { x, y, z };
 }
 
+/** Projection inverse : X = Est, Y = altitude, Z = -Nord (repère Three.js) */
+export function localToGeo(point: LocalPoint, origin: GeoOrigin): GeoPoint {
+  const latRad = (origin.lat * Math.PI) / 180;
+  const lon = origin.lon + (point.x / (Math.cos(latRad) * EARTH_RADIUS)) * (180 / Math.PI);
+  const lat = origin.lat - (point.z / EARTH_RADIUS) * (180 / Math.PI);
+  const elevation = point.y + origin.elevation;
+  return { lon, lat, elevation };
+}
+
 export function computeOrigin(points: GeoPoint[]): GeoOrigin {
   const lon = points.reduce((s, p) => s + p.lon, 0) / points.length;
   const lat = points.reduce((s, p) => s + p.lat, 0) / points.length;

@@ -7,10 +7,12 @@ import type {
   GeoPoint,
   LocalPoint,
   PlaybackState,
+  RiderColor,
   RiderDefinition,
   RiderTelemetry,
   RiderUpdate,
   TrackBorders,
+  TrackRiderSampleOptions,
   TrackWorldHandle,
   TrackWorldOptions,
 } from './types';
@@ -26,11 +28,19 @@ import {
 } from './scene/environment';
 import { loadSurfaceTextures } from './utils/textures';
 import type { TrackViewport } from './TrackViewport';
+import { buildTrackPath, sampleTrackPath, type TrackPathData } from './rider/TrackPath';
+import { localToGeo } from './utils/geo';
+import { m1000rrLeanDeg } from './rider/m1000rr';
 
 const DEFAULT_KML = '/track_data/track_data.kml';
 export const DEFAULT_RIDER_ID = 'rider-1';
 
-const DEMO_RIDER_COLORS = [0xffffff, 0xe84040, 0x4080e8, 0x40c060];
+const DEMO_RIDER_COLORS: RiderColor[] = [
+  'red',
+  'blue-dark',
+  'yellow',
+  'magenta',
+];
 
 export class TrackWorld implements TrackWorldHandle {
   readonly scene: THREE.Scene;
@@ -42,6 +52,7 @@ export class TrackWorld implements TrackWorldHandle {
 
   private center: LocalPoint = { x: 0, y: 0, z: 0 };
   private centerline: LocalPoint[] = [];
+  private trackPath: TrackPathData | null = null;
   private updateIntervalMs = 100;
   private animationId = 0;
   private bikeTemplate: BikeRig | null = null;
@@ -91,6 +102,7 @@ export class TrackWorld implements TrackWorldHandle {
 
     this.center = trackData.center;
     this.centerline = trackData.centerline;
+    this.trackPath = buildTrackPath(this.centerline);
     this.demo = new MultiRiderDemo(this.centerline);
     this.updateIntervalMs = options.riderUpdateIntervalMs ?? 100;
     this.scene.add(trackData.group);
@@ -195,6 +207,42 @@ export class TrackWorld implements TrackWorldHandle {
     this.ensureRider(riderId);
     this.demo?.stop();
     this.riders.get(riderId)!.pushUpdate(update);
+  }
+
+  sampleRiderUpdate(distanceM: number, options: TrackRiderSampleOptions): RiderUpdate {
+    if (!this.trackPath) {
+      throw new Error('[track-viewer] Circuit non initialisé');
+    }
+
+    const sample = sampleTrackPath(this.trackPath, distanceM);
+    const position = sample.position.clone();
+    const lateralOffset = options.lateralOffsetM ?? 0;
+    if (Math.abs(lateralOffset) > 1e-4) {
+      position.x += -sample.tangent.z * lateralOffset;
+      position.z += sample.tangent.x * lateralOffset;
+    }
+
+    const origin = this.getGeoOrigin();
+    const geo = localToGeo(
+      { x: position.x, y: position.y, z: position.z },
+      origin,
+    );
+    const headingDeg =
+      (THREE.MathUtils.radToDeg(Math.atan2(sample.tangent.x, -sample.tangent.z)) + 360) % 360;
+
+    return {
+      lon: geo.lon,
+      lat: geo.lat,
+      elevation: geo.elevation,
+      speedKmh: options.speedKmh,
+      leanDeg: options.leanDeg ?? m1000rrLeanDeg(options.speedKmh / 3.6, sample.signedCurvature),
+      headingDeg,
+      timestamp: options.timestamp,
+    };
+  }
+
+  getTrackLength(): number {
+    return this.trackPath?.totalLength ?? 0;
   }
 
   startPlayback(riderId: string, trace: RiderUpdate[]): void {

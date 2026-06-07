@@ -6,6 +6,7 @@ import type {
   RiderDefinition,
   RiderTelemetry,
   RiderUpdate,
+  TrackRiderSampleOptions,
   TrackViewerHandle,
   TrackViewerOptions,
 } from './types';
@@ -60,6 +61,14 @@ export class TrackViewer implements TrackViewerHandle {
 
   pushRiderUpdate(riderId: string, update: RiderUpdate): void {
     this.world.pushRiderUpdate(riderId, update);
+  }
+
+  sampleRiderUpdate(distanceM: number, options: TrackRiderSampleOptions): RiderUpdate {
+    return this.world.sampleRiderUpdate(distanceM, options);
+  }
+
+  getTrackLength(): number {
+    return this.world.getTrackLength();
   }
 
   startPlayback(riderId: string, trace: RiderUpdate[]): void {

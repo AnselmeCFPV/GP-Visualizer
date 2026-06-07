@@ -53,11 +53,25 @@ export interface TrackViewerOptions extends TrackWorldOptions {
   container: HTMLElement;
 }
 
+export type RiderColor =
+  | 'blue-dark'
+  | 'blue-sky'
+  | 'red'
+  | 'yellow'
+  | 'purple'
+  | 'pink'
+  | 'magenta'
+  | 'green'
+  | 'orange'
+  | 'cyan'
+  | 'black'
+  | 'white';
+
 export interface RiderDefinition {
   id: string;
   label?: string;
-  /** Teinte hex pour distinguer le modèle */
-  color?: number;
+  /** Livrée PNG prédéfinie, ou teinte hex de fallback */
+  color?: RiderColor | number;
 }
 
 export interface DemoSimulatorOptions {
@@ -66,8 +80,15 @@ export interface DemoSimulatorOptions {
   spacingM?: number;
 }
 
+export interface TrackRiderSampleOptions {
+  speedKmh: number;
+  leanDeg?: number;
+  lateralOffsetM?: number;
+  timestamp?: number;
+}
+
 /** Modes caméra interactifs */
-export type CameraMode = 'free' | 'orbit' | 'follow' | 'firstPerson';
+export type CameraMode = 'free' | 'orbit' | 'follow' | 'firstPerson' | 'rear-bike';
 
 export type CameraViewAnchor = 'rider' | 'trackCenter';
 
@@ -148,6 +169,8 @@ export interface TrackWorldHandle {
 
   setRiderUpdateIntervalMs(ms: number): void;
   pushRiderUpdate(riderId: string, update: RiderUpdate): void;
+  sampleRiderUpdate(distanceM: number, options: TrackRiderSampleOptions): RiderUpdate;
+  getTrackLength(): number;
 
   startPlayback(riderId: string, trace: RiderUpdate[]): void;
   pausePlayback(riderId?: string): void;

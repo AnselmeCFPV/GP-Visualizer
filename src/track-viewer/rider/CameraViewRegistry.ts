@@ -11,6 +11,7 @@ const BUILTIN_LABELS: Record<CameraMode, string> = {
   orbit: 'Orbite pilote',
   follow: 'Spectateur',
   firstPerson: '1ère personne',
+  'rear-bike': 'Moto — vue arrière',
 };
 
 function builtin(mode: CameraMode): CameraViewDefinition {
@@ -46,7 +47,7 @@ export class CameraViewRegistry {
   }
 
   private registerDefaults(): void {
-    const modes: CameraMode[] = ['free', 'orbit', 'follow', 'firstPerson'];
+    const modes: CameraMode[] = ['free', 'orbit', 'follow', 'firstPerson', 'rear-bike'];
     for (const mode of modes) {
       this.register(builtin(mode));
     }

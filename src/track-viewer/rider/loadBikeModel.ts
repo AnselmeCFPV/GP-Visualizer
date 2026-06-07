@@ -1,11 +1,29 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import type { RiderColor } from '../types';
 import type { BikeWheelOffsets } from './bikeGrounding';
 
 const BIKE_MODEL_DIR = '/3Dmodels/[OBJ] Generic_Bike_v01_w_Biker/';
 const BIKE_OBJ = 'Generic_Bike_v01_w_Biker.obj';
 const BIKE_MTL = 'Generic_Bike_v01_w_Biker.mtl';
+const textureLoader = new THREE.TextureLoader();
+const liveryTextureCache = new Map<string, THREE.Texture>();
+
+export const RIDER_LIVERY_COLORS: RiderColor[] = [
+  'blue-dark',
+  'blue-sky',
+  'red',
+  'yellow',
+  'purple',
+  'pink',
+  'magenta',
+  'green',
+  'orange',
+  'cyan',
+  'black',
+  'white',
+];
 
 /** Doit correspondre à TrackPath.WHEELBASE_M */
 export const WHEELBASE_M = 1.32;
@@ -34,10 +52,11 @@ function tuneMaterials(root: THREE.Object3D, renderer: THREE.WebGLRenderer): voi
       }
       mat.side = THREE.DoubleSide;
       if (mat instanceof THREE.MeshStandardMaterial) {
-        mat.color.multiplyScalar(1.72);
+        mat.color.multiplyScalar(1.08);
         mat.roughness = Math.min(mat.roughness * 0.72, 0.48);
         mat.metalness = Math.min(mat.metalness, 0.1);
-        mat.emissive.set(0.11, 0.11, 0.12);
+        mat.emissive.set(0.025, 0.025, 0.03);
+        mat.emissiveIntensity = 0.35;
       }
     }
   });
@@ -193,19 +212,68 @@ function loadObjOnly(renderer: THREE.WebGLRenderer, baseUrl: string): Promise<Bi
   });
 }
 
-export function cloneBikeRig(template: BikeRig, tint?: number): BikeRig {
-  const group = template.group.clone(true);
-  if (tint !== undefined) {
-    group.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      for (const mat of mats) {
-        if (mat instanceof THREE.MeshStandardMaterial) {
-          mat.color.lerp(new THREE.Color(tint), 0.35);
-        }
-      }
-    });
+function loadVariantTexture(fileName: string, sourceMap?: THREE.Texture | null): THREE.Texture {
+  const cached = liveryTextureCache.get(fileName);
+  if (cached) return cached;
+
+  const texture = textureLoader.load(`${BIKE_MODEL_DIR}${fileName}`);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = sourceMap?.flipY ?? true;
+  texture.offset.copy(sourceMap?.offset ?? new THREE.Vector2(0, 0));
+  texture.repeat.copy(sourceMap?.repeat ?? new THREE.Vector2(1, 1));
+  texture.center.copy(sourceMap?.center ?? new THREE.Vector2(0, 0));
+  texture.rotation = sourceMap?.rotation ?? 0;
+  texture.wrapS = sourceMap?.wrapS ?? THREE.ClampToEdgeWrapping;
+  texture.wrapT = sourceMap?.wrapT ?? THREE.ClampToEdgeWrapping;
+  liveryTextureCache.set(fileName, texture);
+  return texture;
+}
+
+function hasColor(mat: THREE.Material): mat is THREE.Material & { color: THREE.Color } {
+  return 'color' in mat && mat.color instanceof THREE.Color;
+}
+
+function hasMap(mat: THREE.Material): mat is THREE.Material & { map: THREE.Texture | null } {
+  return 'map' in mat;
+}
+
+function applyNamedLivery(mat: THREE.Material, color: RiderColor): void {
+  if (!hasMap(mat)) return;
+
+  if (mat.name === 'Generic_Bike_v01') {
+    mat.map = loadVariantTexture(`Generic_Bike_v01_${color}.png`, mat.map);
+    if (hasColor(mat)) mat.color.setScalar(1);
+    mat.needsUpdate = true;
   }
+
+  if (mat.name === 'Biker') {
+    mat.map = loadVariantTexture(`Biker_D_${color}.png`, mat.map);
+    if (hasColor(mat)) mat.color.setScalar(1);
+    mat.needsUpdate = true;
+  }
+}
+
+export function cloneBikeRig(template: BikeRig, livery?: RiderColor | number): BikeRig {
+  const group = template.group.clone(true);
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+
+    const sourceMats = Array.isArray(child.material) ? child.material : [child.material];
+    const clonedMats = sourceMats.map((material) => material.clone());
+
+    for (const mat of clonedMats) {
+      if (livery === undefined) continue;
+
+      if (typeof livery === 'number') {
+        if (hasColor(mat)) mat.color.lerp(new THREE.Color(livery), 0.35);
+      } else {
+        applyNamedLivery(mat, livery);
+      }
+    }
+
+    child.material = Array.isArray(child.material) ? clonedMats : clonedMats[0]!;
+  });
+
   return { group, wheelOffsets: template.wheelOffsets };
 }
 

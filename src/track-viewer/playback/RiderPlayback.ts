@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { PlaybackState, RiderUpdate } from '../types';
 import type { InterpolatedRiderState } from '../rider/RiderPose';
 import { RiderPose } from '../rider/RiderPose';
@@ -21,7 +22,11 @@ export class RiderPlayback {
     speedKmh: 0,
     leanDeg: 0,
   };
+  private segmentStart: InterpolatedRiderState = { ...this.current };
   private target: InterpolatedRiderState = { ...this.current };
+  private segmentStartMs = 0;
+  private segmentDurationMs = 100;
+  private lastUpdateTimestamp: number | null = null;
 
   private trace: RiderUpdate[] = [];
   private traceIndex = 0;
@@ -51,7 +56,29 @@ export class RiderPlayback {
 
   pushUpdate(update: RiderUpdate): void {
     this.mode = 'playback';
-    this.applyTarget(update);
+    const now = performance.now();
+    const next = this.stateFromUpdate(update);
+
+    if (!this.hasData) {
+      this.current = { ...next };
+      this.segmentStart = { ...next };
+      this.target = { ...next };
+      this.segmentStartMs = now;
+    } else {
+      next.distance = this.unwrapDistance(this.target.distance, next.distance);
+      this.segmentStart = { ...this.current };
+      this.target = next;
+      this.segmentStartMs = now;
+    }
+
+    const incomingTimestamp = update.timestamp ?? null;
+    if (incomingTimestamp !== null && this.lastUpdateTimestamp !== null) {
+      const delta = incomingTimestamp - this.lastUpdateTimestamp;
+      this.segmentDurationMs = THREE.MathUtils.clamp(delta, 30, 500);
+    } else {
+      this.segmentDurationMs = this.updateIntervalMs;
+    }
+    this.lastUpdateTimestamp = incomingTimestamp;
     this.hasData = true;
   }
 
@@ -64,6 +91,7 @@ export class RiderPlayback {
     this.replayStartMs = performance.now();
     this.applyTarget(trace[0]);
     this.current = { ...this.target };
+    this.segmentStart = { ...this.target };
     this.hasData = true;
   }
 
@@ -81,18 +109,37 @@ export class RiderPlayback {
     this.trace = [];
     this.traceIndex = 0;
     this.hasData = false;
+    this.lastUpdateTimestamp = null;
   }
 
-  /** Interpolation légère entre vos mises à jour (distance / vitesse / inclinaison) */
+  /** Interpolation temporelle entre vos mises à jour (distance / vitesse / inclinaison) */
   tick(dt: number): InterpolatedRiderState {
     if (this.mode === 'playback' && !this.paused && this.trace.length > 0) {
       this.advanceTraceReplay();
+      const rate = 1 - Math.exp(-dt * 12);
+      this.current.distance += (this.target.distance - this.current.distance) * rate;
+      this.current.speedKmh += (this.target.speedKmh - this.current.speedKmh) * rate;
+      this.current.leanDeg += (this.target.leanDeg - this.current.leanDeg) * rate;
+      return { ...this.current };
     }
 
-    const rate = 1 - Math.exp(-dt * 12);
-    this.current.distance += (this.target.distance - this.current.distance) * rate;
-    this.current.speedKmh += (this.target.speedKmh - this.current.speedKmh) * rate;
-    this.current.leanDeg += (this.target.leanDeg - this.current.leanDeg) * rate;
+    const elapsed = performance.now() - this.segmentStartMs;
+    const t = THREE.MathUtils.clamp(elapsed / Math.max(this.segmentDurationMs, 1), 0, 1);
+    this.current.distance = THREE.MathUtils.lerp(
+      this.segmentStart.distance,
+      this.target.distance,
+      t,
+    );
+    this.current.speedKmh = THREE.MathUtils.lerp(
+      this.segmentStart.speedKmh,
+      this.target.speedKmh,
+      t,
+    );
+    this.current.leanDeg = THREE.MathUtils.lerp(
+      this.segmentStart.leanDeg,
+      this.target.leanDeg,
+      t,
+    );
 
     return { ...this.current };
   }
@@ -125,9 +172,25 @@ export class RiderPlayback {
   }
 
   private applyTarget(update: RiderUpdate): void {
-    this.target.distance = this.pose.projectUpdate(update, this.origin);
-    this.target.speedKmh = update.speedKmh;
-    this.target.leanDeg = update.leanDeg;
+    const next = this.stateFromUpdate(update);
+    next.distance = this.unwrapDistance(this.target.distance, next.distance);
+    this.target = next;
+  }
+
+  private stateFromUpdate(update: RiderUpdate): InterpolatedRiderState {
+    return {
+      distance: this.pose.projectUpdate(update, this.origin),
+      speedKmh: update.speedKmh,
+      leanDeg: update.leanDeg,
+    };
+  }
+
+  private unwrapDistance(reference: number, next: number): number {
+    const totalLength = this.pose.getPath().totalLength;
+    let result = next;
+    while (result < reference - totalLength * 0.5) result += totalLength;
+    while (result > reference + totalLength * 0.5) result -= totalLength;
+    return result;
   }
 
   private advanceTraceReplay(): void {

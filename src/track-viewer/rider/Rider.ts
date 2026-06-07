@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Scene } from 'three';
-import type { LocalPoint, PlaybackState, RiderUpdate } from '../types';
+import type { LocalPoint, PlaybackState, RiderColor, RiderUpdate } from '../types';
 import { RiderPose, type RiderFrame } from './RiderPose';
 import { RiderVisual } from './RiderVisual';
 import { RiderTrail } from './RiderTrail';
@@ -14,8 +14,8 @@ const _trailOrigin = new THREE.Vector3();
 
 export interface RiderOptions {
   label?: string;
-  /** Teinte du modèle (hex) pour distinguer les pilotes */
-  color?: number;
+  /** Livrée PNG prédéfinie, ou teinte hex de fallback */
+  color?: RiderColor | number;
 }
 
 export class Rider {
@@ -26,7 +26,7 @@ export class Rider {
   readonly playback: RiderPlayback;
 
   private readonly pose: RiderPose;
-  private readonly color?: number;
+  private readonly color?: RiderColor | number;
   private modelReady = false;
   private lastFrame: RiderFrame | null = null;
   private firstPersonMode = false;

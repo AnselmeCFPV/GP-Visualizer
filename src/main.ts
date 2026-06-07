@@ -1,15 +1,74 @@
-import { TrackWorld, TrackViewport } from './track-viewer';
+import { RIDER_LIVERY_COLORS, TrackWorld, TrackViewport } from './track-viewer';
+
+interface ApiRiderState {
+  id: string;
+  distanceM: number;
+  speedKmh: number;
+  lateralM: number;
+  phase: number;
+}
+
+const RIDER_COUNT = 300;
+const API_INTERVAL_MS = 100;
+const HUD_VISIBLE_RIDERS = 12;
+
+function startApiSimulation(world: TrackWorld): () => void {
+  const trackLength = world.getTrackLength();
+  const riders: ApiRiderState[] = [];
+
+  for (let i = 0; i < RIDER_COUNT; i++) {
+    const id = `rider-${i + 1}`;
+    const color = RIDER_LIVERY_COLORS[i % RIDER_LIVERY_COLORS.length]!;
+    world.registerRider({
+      id,
+      label: `Pilote ${i + 1}`,
+      color,
+    });
+
+    riders.push({
+      id,
+      distanceM: (trackLength * i) / RIDER_COUNT,
+      speedKmh: 140 + (i % 9) * 4,
+      lateralM: ((i % 7) - 3) * 0.65,
+      phase: i * 0.73,
+    });
+  }
+
+  let last = performance.now();
+  const timer = window.setInterval(() => {
+    const now = performance.now();
+    const dt = Math.min((now - last) / 1000, 0.2);
+    last = now;
+
+    for (const rider of riders) {
+      const speedWave = Math.sin(now * 0.0007 + rider.phase) * 8;
+      const speedKmh = rider.speedKmh + speedWave;
+      rider.distanceM = (rider.distanceM + (speedKmh / 3.6) * dt) % trackLength;
+
+      const lateral =
+        rider.lateralM +
+        Math.sin(now * 0.0013 + rider.phase) * 1.15 +
+        Math.sin(now * 0.00037 + rider.phase * 1.9) * 0.65;
+
+      const update = world.sampleRiderUpdate(rider.distanceM, {
+        speedKmh,
+        lateralOffsetM: Math.max(-3.6, Math.min(3.6, lateral)),
+        timestamp: now,
+      });
+      world.pushRiderUpdate(rider.id, update);
+    }
+  }, API_INTERVAL_MS);
+
+  return () => window.clearInterval(timer);
+}
 
 async function init(): Promise<void> {
   const hud = document.getElementById('hud');
 
   const world = await TrackWorld.create({
-    startDemoSimulator: true,
-    demoRiderCount: 4,
-    demoSpacingM: 8,
-    demoSpeedKmh: 175,
     riderUpdateIntervalMs: 100,
   });
+  const stopApiSimulation = startApiSimulation(world);
 
   const viewports = [
     TrackViewport.create({
@@ -21,14 +80,14 @@ async function init(): Promise<void> {
     TrackViewport.create({
       world,
       container: document.getElementById('view-tv')!,
-      cameraViewId: 'broadcast',
+      cameraViewId: 'rear-bike',
       followRiderId: 'rider-1',
     }),
     TrackViewport.create({
       world,
       container: document.getElementById('view-p4')!,
       cameraViewId: 'firstPerson',
-      followRiderId: 'rider-4',
+      followRiderId: `rider-${RIDER_COUNT}`,
     }),
     TrackViewport.create({
       world,
@@ -50,15 +109,18 @@ async function init(): Promise<void> {
     if (!hud) return;
     const riders = world.getAllRiderTelemetry();
     const lines = riders
+      .slice(0, HUD_VISIBLE_RIDERS)
       .map(
         (r) =>
           `<span class="rider-line">${r.label} : <strong>${r.speedKmh.toFixed(0)}</strong> km/h · ${r.leanDeg.toFixed(0)}°</span>`,
       )
       .join('<br />');
+    const hiddenCount = Math.max(0, riders.length - HUD_VISIBLE_RIDERS);
 
     hud.innerHTML = `
-      <strong>Circuit de Prenois</strong> · 4 pilotes<br />
+      <strong>Circuit de Prenois</strong> · ${riders.length} pilotes API<br />
       ${lines}
+      ${hiddenCount > 0 ? `<br /><span class="rider-line">+ ${hiddenCount} autres pilotes</span>` : ''}
       <br />
       <kbd>1</kbd>–<kbd>4</kbd> focus fenêtre active · clic pour le son
     `;
@@ -75,7 +137,10 @@ async function init(): Promise<void> {
   setInterval(updateHud, 100);
   updateHud();
 
-  window.addEventListener('beforeunload', () => world.dispose());
+  window.addEventListener('beforeunload', () => {
+    stopApiSimulation();
+    world.dispose();
+  });
 }
 
 init();

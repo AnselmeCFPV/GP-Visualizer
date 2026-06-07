@@ -3,6 +3,7 @@ export { TrackWorld, DEFAULT_RIDER_ID, applyElevationFromGps } from './TrackWorl
 export { TrackViewport } from './TrackViewport';
 export { parseTrackKml, loadTrackKml } from './kmlParser';
 export { RiderPlayback } from './playback/RiderPlayback';
+export { RIDER_LIVERY_COLORS } from './rider/loadBikeModel';
 export { FINISH_LINE_GEO } from './geometry/finishLine';
 export { geoToLocal, computeOrigin } from './utils/geo';
 export type { GeoOrigin } from './utils/geo';
@@ -20,10 +21,12 @@ export type {
   LocalPoint,
   PlaybackMode,
   PlaybackState,
+  RiderColor,
   RiderDefinition,
   RiderTelemetry,
   RiderUpdate,
   TrackBorders,
+  TrackRiderSampleOptions,
   TrackViewerHandle,
   TrackViewerOptions,
   TrackWorldHandle,

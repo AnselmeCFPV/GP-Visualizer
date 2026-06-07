@@ -13,7 +13,8 @@ import type { RiderFrame } from './RiderPose';
 import type { MotionBlurState } from './SpeedMotionBlur';
 import { resolveFixedViewPosition } from './CameraViewRegistry';
 
-const FP_HEAD = new THREE.Vector3(0, 1.38, 0.22);
+const FP_HEAD = new THREE.Vector3(0, 1.18, 0.22);
+const REAR_BIKE_MOUNT = new THREE.Vector3(0, 1.05, 1.05);
 const FP_PITCH = new THREE.Quaternion().setFromAxisAngle(
   new THREE.Vector3(1, 0, 0),
   THREE.MathUtils.degToRad(-6),
@@ -44,6 +45,7 @@ const _shakeQuat = new THREE.Quaternion();
 const _panRight = new THREE.Vector3();
 const _panUp = new THREE.Vector3();
 const _forward = new THREE.Vector3();
+const _rearTarget = new THREE.Vector3();
 
 export class CameraController {
   private mode: CameraMode = 'free';
@@ -63,6 +65,9 @@ export class CameraController {
   private customView: CameraViewSpec | null = null;
   private viewAzimuthRad = 0;
   private fixedViewPosition: LocalPoint | null = null;
+  private rearBikePosition = new THREE.Vector3();
+  private rearBikeTarget = new THREE.Vector3();
+  private rearBikeHasPose = false;
 
   constructor(
     private readonly camera: PerspectiveCamera,
@@ -113,6 +118,9 @@ export class CameraController {
     this.customView = null;
     this.fixedViewPosition = null;
     this.mode = mode;
+    if (mode === 'rear-bike') {
+      this.rearBikeHasPose = false;
+    }
     if (mode === 'orbit' && frame) {
       this.initOrbitFromCamera(frame.bikePosition);
     }
@@ -122,14 +130,14 @@ export class CameraController {
         this.lastRiderPos.copy(frame.bikePosition);
       }
     }
-    if (mode !== 'firstPerson') {
+    if (mode !== 'firstPerson' && mode !== 'rear-bike') {
       this.motionBlurState = { active: false, speedKmh: 0 };
     }
     this.applyModeSettings();
   }
 
   cycleMode(frame: RiderFrame | null = null): CameraMode {
-    const order: CameraMode[] = ['free', 'orbit', 'follow', 'firstPerson'];
+    const order: CameraMode[] = ['free', 'orbit', 'follow', 'firstPerson', 'rear-bike'];
     const idx = (order.indexOf(this.mode) + 1) % order.length;
     this.setMode(order[idx]!, frame);
     return this.mode;
@@ -178,6 +186,9 @@ export class CameraController {
       case 'firstPerson':
         this.applyFirstPerson(frame, dt);
         break;
+      case 'rear-bike':
+        this.applyRearBike(frame, dt);
+        break;
     }
   }
 
@@ -207,6 +218,10 @@ export class CameraController {
         break;
       case 'firstPerson':
         this.camera.fov = 82;
+        this.camera.near = 0.08;
+        break;
+      case 'rear-bike':
+        this.camera.fov = 72;
         this.camera.near = 0.08;
         break;
     }
@@ -287,6 +302,36 @@ export class CameraController {
     this.camera.updateMatrixWorld();
 
     this.motionBlurState = { active: true, speedKmh: frame.speedKmh };
+  }
+
+  private applyRearBike(frame: RiderFrame, dt: number): void {
+    this.controls.enabled = false;
+
+    _headWorld.copy(REAR_BIKE_MOUNT).applyQuaternion(frame.bikeQuaternion);
+    _offset.copy(frame.bikePosition).add(_headWorld);
+
+    _rearTarget
+      .copy(frame.bikePosition)
+      .addScaledVector(frame.tangent, -28)
+      .addScaledVector(_bikeUp.set(0, 1, 0).applyQuaternion(frame.bikeQuaternion), 0.75);
+
+    if (!this.rearBikeHasPose) {
+      this.rearBikePosition.copy(_offset);
+      this.rearBikeTarget.copy(_rearTarget);
+      this.rearBikeHasPose = true;
+    } else {
+      const posAlpha = 1 - Math.exp(-dt * 18);
+      const targetAlpha = 1 - Math.exp(-dt * 10);
+      this.rearBikePosition.lerp(_offset, posAlpha);
+      this.rearBikeTarget.lerp(_rearTarget, targetAlpha);
+    }
+
+    this.camera.position.copy(this.rearBikePosition);
+    this.camera.up.copy(_bikeUp);
+    this.camera.lookAt(this.rearBikeTarget);
+    this.camera.updateMatrixWorld();
+
+    this.motionBlurState = { active: false, speedKmh: 0 };
   }
 
   private lookHorizonAt(target: THREE.Vector3): void {
